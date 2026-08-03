@@ -47,7 +47,7 @@ class AntbenchmarkEnvCfg(DirectRLEnvCfg):
 
     # robot
     robot: ArticulationCfg = SPDRBOT_CFG.replace(prim_path="/World/envs/env_.*/Robot")
-    joint_gears: list = [275, 275, 275, 275, 275, 275, 275, 275, 275, 275, 275, 275] #275
+    #joint_gears: list = [275, 275, 275, 275, 275, 275, 275, 275, 275, 275, 275, 275] #275
     heading_weight: float = 0.5
     up_weight: float = 0.1
 
