@@ -25,6 +25,7 @@ class TorqueLocomotionEnvCfg(DirectRLEnvCfg):
     state_space = 0
     max_torque = 2.5
 
+    velocity_arrow_vis: bool = True
     # simulation
     sim: SimulationCfg = SimulationCfg(dt=1 / 120, render_interval=decimation)
     terrain = TerrainImporterCfg(
@@ -40,6 +41,7 @@ class TorqueLocomotionEnvCfg(DirectRLEnvCfg):
         ),
         debug_vis=False,
     )
+    
 
     # scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(
