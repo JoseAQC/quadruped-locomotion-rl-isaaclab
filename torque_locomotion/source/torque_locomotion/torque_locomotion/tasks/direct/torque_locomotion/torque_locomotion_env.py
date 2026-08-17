@@ -11,7 +11,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.markers import VisualizationMarkers, VisualizationMarkersCfg
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
-from isaaclab_tasks.direct.locomotion.locomotion_env import LocomotionEnv
+from isaaclab_tasks.direct.locomotion.locomotion_env import LocomotionEnv, compute_rewards
 
 from .torque_locomotion_env_cfg import TorqueLocomotionEnvCfg
 
@@ -150,3 +150,93 @@ class TorqueLocomotionEnv(LocomotionEnv):
             self._update_velocity_marker()
 
         return obs
+    
+    def _get_rewards(self) -> torch.Tensor:
+
+        # Recompensa ORIGINAL de Isaac Lab
+        total_reward = compute_rewards(
+            self.actions,
+            self.reset_terminated,
+            self.cfg.up_weight,
+            self.cfg.heading_weight,
+            self.heading_proj,
+            self.up_proj,
+            self.dof_vel,
+            self.dof_pos_scaled,
+            self.potentials,
+            self.prev_potentials,
+            self.cfg.actions_cost_scale,
+            self.cfg.energy_cost_scale,
+            self.cfg.dof_vel_scale,
+            self.cfg.death_cost,
+            self.cfg.alive_reward_scale,
+            self.motor_effort_ratio,
+        )
+
+        # Recalcular términos SOLO para monitorización
+        heading_reward = torch.where(
+            self.heading_proj > 0.8,
+            torch.ones_like(self.heading_proj) * self.cfg.heading_weight,
+            self.cfg.heading_weight * self.heading_proj / 0.8,
+        )
+
+        up_reward = torch.where(
+            self.up_proj > 0.93,
+            torch.ones_like(self.up_proj) * self.cfg.up_weight,
+            torch.zeros_like(self.up_proj),
+        )
+
+        actions_cost = torch.sum(self.actions**2, dim=-1)
+
+        electricity_cost = torch.sum(
+            torch.abs(
+                self.actions
+                * self.dof_vel
+                * self.cfg.dof_vel_scale
+            )
+            * self.motor_effort_ratio.unsqueeze(0),
+            dim=-1,
+        )
+
+        dof_at_limit_cost = torch.sum(
+            self.dof_pos_scaled > 0.98,
+            dim=-1,
+        )
+
+        alive_reward = (
+            torch.ones_like(self.potentials)
+            * self.cfg.alive_reward_scale
+        )
+
+        progress_reward = (
+            self.potentials
+            - self.prev_potentials
+        )
+
+        # Solo logging
+        self.extras["log"] = {
+            "Rewards/Total": total_reward.mean(),
+            "Rewards/Progress": progress_reward.mean(),
+            "Rewards/Alive": alive_reward.mean(),
+            "Rewards/Heading": heading_reward.mean(),
+            "Rewards/Upright": up_reward.mean(),
+
+            "Costs/Actions": actions_cost.mean(),
+            "Costs/Energy": electricity_cost.mean(),
+            "Costs/JointLimits": dof_at_limit_cost.float().mean(),
+
+            "RewardContributions/Actions":
+                (-self.cfg.actions_cost_scale * actions_cost).mean(),
+
+            "RewardContributions/Energy":
+                (-self.cfg.energy_cost_scale * electricity_cost).mean(),
+
+            "RewardContributions/JointLimits":
+                (-dof_at_limit_cost.float()).mean(),
+
+            "Episode/TerminationRate":
+                self.reset_terminated.float().mean(),
+        }
+
+        # PPO recibe EXACTAMENTE lo mismo que antes
+        return total_reward
