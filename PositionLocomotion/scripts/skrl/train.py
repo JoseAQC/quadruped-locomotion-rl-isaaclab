@@ -14,7 +14,8 @@ a more user-friendly way.
 
 import argparse
 import sys
-
+import numpy as np
+import wandb as _wandb_module
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -127,6 +128,68 @@ else:
     agent_cfg_entry_point = args_cli.agent
     algorithm = agent_cfg_entry_point.split("_cfg")[0].split("skrl_")[-1].lower()
 
+# ---------------------------------------------------------------------------
+# Patch skrl Agent.write_tracking_data
+# ---------------------------------------------------------------------------
+
+
+_orig_wandb_init = _wandb_module.init
+
+
+def _patched_wandb_init(*args, **kwargs):
+    kwargs["sync_tensorboard"] = False
+    return _orig_wandb_init(*args, **kwargs)
+
+
+from skrl.agents.torch.base import Agent as _SkrlAgent
+
+_orig_write_tracking_data_agent = _SkrlAgent.write_tracking_data
+
+
+def _patched_write_tracking_data_agent(
+    self,
+    *,
+    timestep: int,
+    timesteps: int,
+) -> None:
+
+    wandb_data = {}
+
+    # Copy data BEFORE skrl clears tracking_data
+    for key, values in self.tracking_data.items():
+
+        if len(values) == 0:
+            continue
+
+        if key.endswith("(min)"):
+            value = np.min(values)
+
+        elif key.endswith("(max)"):
+            value = np.max(values)
+
+        else:
+            value = np.mean(values)
+
+        # Convert NumPy / Torch-compatible scalar to Python float
+        wandb_data[key] = float(value)
+
+    # Preserve normal skrl behavior
+    _orig_write_tracking_data_agent(
+        self,
+        timestep=timestep,
+        timesteps=timesteps,
+    )
+
+    # Send the same metrics directly to W&B
+    if _wandb_module.run is not None and wandb_data:
+
+        _wandb_module.run.log(
+            wandb_data,
+            step=timestep,
+        )
+
+
+_SkrlAgent.write_tracking_data = _patched_write_tracking_data_agent
 
 @hydra_task_config(args_cli.task, agent_cfg_entry_point)
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
@@ -183,6 +246,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
 
+    
     # get checkpoint path (to resume training)
     resume_path = retrieve_file_path(args_cli.checkpoint) if args_cli.checkpoint else None
 
@@ -224,6 +288,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # configure and instantiate the skrl runner
     # https://skrl.readthedocs.io/en/latest/api/utils/runner.html
     runner = Runner(env, agent_cfg)
+
+    agent = runner._agent
+
+    agent.track_data(
+        "Test / Connection",
+        1.0,
+    )
 
     # load checkpoint (if specified)
     if resume_path:
