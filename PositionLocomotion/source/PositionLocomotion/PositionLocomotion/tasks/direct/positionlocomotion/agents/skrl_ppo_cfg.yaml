@@ -79,12 +79,12 @@ agent:
     wandb: True
 
     wandb_kwargs:
-      project: "SpdrBot_Locomotion"
+      project: "Position_Locomotion"
     
 
 # Sequential trainer
 # https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
 trainer:
   class: SequentialTrainer
-  timesteps: 40000
+  timesteps: 1000
   environment_info: log

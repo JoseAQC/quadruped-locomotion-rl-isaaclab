@@ -23,6 +23,7 @@ class PositionlocomotionEnvCfg(DirectRLEnvCfg):
     state_space = 0
     max_torque = 5.0
 
+    velocity_arrow_vis: bool = True
     # simulation
     sim: SimulationCfg = SimulationCfg(dt=1 / 120, render_interval=decimation)
     terrain = TerrainImporterCfg(
@@ -46,11 +47,11 @@ class PositionlocomotionEnvCfg(DirectRLEnvCfg):
 
     # robot
     robot: ArticulationCfg = SPDRBOT_CFG.replace(prim_path="/World/envs/env_.*/Robot")
-    #joint_gears: list = [275, 275, 275, 275, 275, 275, 275, 275, 275, 275, 275, 275] #275
+    joint_gears: list = [275, 275, 275, 275, 275, 275, 275, 275, 275, 275, 275, 275] #275
     heading_weight: float = 0.5
     up_weight: float = 0.1
 
-    energy_cost_scale: float = 0.05
+    energy_cost_scale: float = 0.005
     actions_cost_scale: float = 0.005
     alive_reward_scale: float = 0.5
     dof_vel_scale: float = 0.2
