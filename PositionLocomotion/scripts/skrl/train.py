@@ -15,7 +15,9 @@ a more user-friendly way.
 import argparse
 import sys
 import numpy as np
+
 import wandb as _wandb_module
+
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -128,6 +130,7 @@ else:
     agent_cfg_entry_point = args_cli.agent
     algorithm = agent_cfg_entry_point.split("_cfg")[0].split("skrl_")[-1].lower()
 
+
 # ---------------------------------------------------------------------------
 # Patch skrl Agent.write_tracking_data
 # ---------------------------------------------------------------------------
@@ -137,9 +140,21 @@ _orig_wandb_init = _wandb_module.init
 
 
 def _patched_wandb_init(*args, **kwargs):
-    kwargs["sync_tensorboard"] = False
-    return _orig_wandb_init(*args, **kwargs)
 
+    # Evitamos utilizar TensorBoard como intermediario
+    kwargs["sync_tensorboard"] = False
+
+    print("[W&B] Initializing Weights & Biases...")
+
+    run = _orig_wandb_init(*args, **kwargs)
+
+    print(f"[W&B] Run initialized: {run}")
+
+    return run
+
+
+# IMPORTANTE: faltaba esta línea
+_wandb_module.init = _patched_wandb_init
 
 from skrl.agents.torch.base import Agent as _SkrlAgent
 
@@ -190,6 +205,7 @@ def _patched_write_tracking_data_agent(
 
 
 _SkrlAgent.write_tracking_data = _patched_write_tracking_data_agent
+
 
 @hydra_task_config(args_cli.task, agent_cfg_entry_point)
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
@@ -246,7 +262,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
     dump_yaml(os.path.join(log_dir, "params", "agent.yaml"), agent_cfg)
 
-    
     # get checkpoint path (to resume training)
     resume_path = retrieve_file_path(args_cli.checkpoint) if args_cli.checkpoint else None
 
@@ -295,7 +310,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         "Test / Connection",
         1.0,
     )
-
+    
     # load checkpoint (if specified)
     if resume_path:
         print(f"[INFO] Loading model checkpoint from: {resume_path}")

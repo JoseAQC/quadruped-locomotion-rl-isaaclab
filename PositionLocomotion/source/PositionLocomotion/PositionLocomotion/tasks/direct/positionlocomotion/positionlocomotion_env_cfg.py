@@ -23,7 +23,7 @@ class PositionlocomotionEnvCfg(DirectRLEnvCfg):
     state_space = 0
     max_torque = 5.0
 
-    velocity_arrow_vis: bool = True
+    velocity_arrow_vis: bool = False
     # simulation
     sim: SimulationCfg = SimulationCfg(dt=1 / 120, render_interval=decimation)
     terrain = TerrainImporterCfg(

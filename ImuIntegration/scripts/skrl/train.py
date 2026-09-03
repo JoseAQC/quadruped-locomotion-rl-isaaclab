@@ -14,6 +14,9 @@ a more user-friendly way.
 
 import argparse
 import sys
+import numpy as np
+
+import wandb as _wandb_module
 
 from isaaclab.app import AppLauncher
 
@@ -126,6 +129,82 @@ if args_cli.agent is None:
 else:
     agent_cfg_entry_point = args_cli.agent
     algorithm = agent_cfg_entry_point.split("_cfg")[0].split("skrl_")[-1].lower()
+
+
+# ---------------------------------------------------------------------------
+# Patch skrl Agent.write_tracking_data
+# ---------------------------------------------------------------------------
+
+
+_orig_wandb_init = _wandb_module.init
+
+
+def _patched_wandb_init(*args, **kwargs):
+
+    # Evitamos utilizar TensorBoard como intermediario
+    kwargs["sync_tensorboard"] = False
+
+    print("[W&B] Initializing Weights & Biases...")
+
+    run = _orig_wandb_init(*args, **kwargs)
+
+    print(f"[W&B] Run initialized: {run}")
+
+    return run
+
+
+# IMPORTANTE: faltaba esta línea
+_wandb_module.init = _patched_wandb_init
+
+from skrl.agents.torch.base import Agent as _SkrlAgent
+
+_orig_write_tracking_data_agent = _SkrlAgent.write_tracking_data
+
+
+def _patched_write_tracking_data_agent(
+    self,
+    *,
+    timestep: int,
+    timesteps: int,
+) -> None:
+
+    wandb_data = {}
+
+    # Copy data BEFORE skrl clears tracking_data
+    for key, values in self.tracking_data.items():
+
+        if len(values) == 0:
+            continue
+
+        if key.endswith("(min)"):
+            value = np.min(values)
+
+        elif key.endswith("(max)"):
+            value = np.max(values)
+
+        else:
+            value = np.mean(values)
+
+        # Convert NumPy / Torch-compatible scalar to Python float
+        wandb_data[key] = float(value)
+
+    # Preserve normal skrl behavior
+    _orig_write_tracking_data_agent(
+        self,
+        timestep=timestep,
+        timesteps=timesteps,
+    )
+
+    # Send the same metrics directly to W&B
+    if _wandb_module.run is not None and wandb_data:
+
+        _wandb_module.run.log(
+            wandb_data,
+            step=timestep,
+        )
+
+
+_SkrlAgent.write_tracking_data = _patched_write_tracking_data_agent
 
 
 @hydra_task_config(args_cli.task, agent_cfg_entry_point)

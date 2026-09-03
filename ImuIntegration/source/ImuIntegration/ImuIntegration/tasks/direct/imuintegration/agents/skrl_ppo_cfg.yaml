@@ -70,6 +70,11 @@ agent:
     write_interval: auto
     checkpoint_interval: auto
 
+    wandb: true
+
+    wandb_kwargs:
+      project: "ImuIntegration"
+
 
 # Sequential trainer
 # https://skrl.readthedocs.io/en/latest/api/trainers/sequential.html
